@@ -24,3 +24,7 @@ Thanks to all, which helped with some puzzle parts. It was not so easy to combin
 ## How to use?
 
 An example for how to call the is shown in the example.php
+
+## How to contribute?
+
+Please send information provided by exportInformation() function, so that I could do some tests with real vehicle data (before I have a Fiat car available). Feel free to XXX-out sensible information, but please don't delete complete information blocks. 

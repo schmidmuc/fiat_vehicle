@@ -6,23 +6,11 @@ include ( api.php );
 // Create a new instance with your FIAT user account credentials
 $fiat = new apiFiat( FIAT_USER, FIAT_PASSWORD );
 
-// Get all vehicles (VIN) linked to the user account
-$vinArray = $fiat->getVehicles ();
-
-// Check if there are vehicle VINs in the result array
-if ( is_array($vinArray) ) {
-
-	// For each vehicle VIN ...	
-	foreach ($vinArray as $vin) {
-		
-		// ... get the vehicle status and ...
-		$fiat->getVehicleStatus ( $vin );
-
-		// ... get the locaction of the vehicle
-		$fiat->getVehicleLocation ( $vin );
-
-  	}
-}
+// Get all information from all vehicles linked to the user account
+$fiat->apiRequestAll ();
 
 // Finally print all log messages
 echo $fiat->getLog ();
+
+// Export the vehicle data information for further development/testing
+echo $fiat->exportInformation();
