@@ -22,6 +22,7 @@ class apiFiat {
 	private string			$fiatLoginPassword;
 	private string			$fiatLoginToken;
 	private string			$fiatLoginUID;
+	private					$fiatCookieJar;
 
 	private string			$fiatJwtUrl						= "https://loginmyuconnect.fiat.com/accounts.getJWT";
 	private string			$fiatJwtIdToken;
@@ -35,7 +36,7 @@ class apiFiat {
 	private string			$awsCredentialsAccessKeyId;
 	private string			$awsCredentialsExpiration;
 	private string			$awsCredentialsSecretKey;
-	private string			$awsCredentialsSessionToken;
+	private string			$awsCredentialsSessionToken		= "";
 	private string			$awsCredentialsUserID;
 
 	private string			$awsApiUrl  					= "https://channels.sdpr-01.fcagcv.com";
@@ -43,8 +44,9 @@ class apiFiat {
 	private string			$awsRegion						= "eu-west-1";
 
 	private array			$vehicles;
+	private array			$vehicleStatus;
 
-	private string			$log							= "";
+	private array			$logArray;
 
 
 
@@ -54,7 +56,15 @@ class apiFiat {
         $this->fiatLoginPassword 			= $password;
 
 		$this->fiatLoginSessionExpiration	= 7776000;
-		$this->awsAuthClientRequestID 		= getRandomClientRequestID();
+		$this->awsAuthClientRequestID 		= $this->getRandomClientRequestID();
+
+		$this->logArray						= array();
+		$this->vehicles						= array();
+		$this->vehicleStatus				= array();
+
+		$this->fiatCookieJar				= tempnam('/tmp','cookieFiat');
+
+		$this->appendToLogArray ( "Temporary cookie file created", $this->fiatCookieJar, 2 );
 
     }
 
@@ -62,7 +72,7 @@ class apiFiat {
 
 	private function callApiFiatWebSDK () {
 
-		$this->log .= "<b>WebSDK</b> = ".$this->fiatWebSdkUrl."\n<br>";
+		$this->appendToLogArray ( "WebSDK", $this->fiatWebSdkUrl, 2, 1 );
 
 		$curl = curl_init();
 
@@ -76,13 +86,17 @@ class apiFiat {
 			CURLOPT_FOLLOWLOCATION 	=> 	true,
 			CURLOPT_HTTP_VERSION 	=> 	CURL_HTTP_VERSION_1_1,
 			CURLOPT_CUSTOMREQUEST 	=> 	'GET',
+			CURLOPT_COOKIEJAR		=>	$this->fiatCookieJar,
+			// CURLOPT_HTTPHEADER => array(
+			//   'Cookie: ASP.NET_SessionId=til3lzkz3kdqas14lehwq0sm; gmid=gmid.ver4.AcbHk6LF-w.mSDIL-OQ0kWBFotQ2YipdQYB7E7-SJmCxvyOx17OTZbXPEMSsOhyWZ0kdDov9fOV.JA4W5L23nJwCCaRi9qTzVhDeJllPyrw5XNoMqGh51-vECLTZH_PTkjfG42orCYwsSXpUBCpC4mPQjfh1eVEHBg.sc3; hasGmid=ver4; ucid=vthVogPt1lCCjnSIR8M6nw'
+			// ),
 		));
 
 		$response = curl_exec($curl);
 
 		curl_close($curl);
 
-		$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".$response."\n<br>";
+		$this->appendToLogArray ( "Response", $response, 2, 2 );
 
 	}
 
@@ -90,7 +104,7 @@ class apiFiat {
 
 	private function callApiFiatLogin () {
 
-		$this->log .= "<b>Fiat Login</b> = ".$this->fiatLoginUrl."\n<br>";
+		$this->appendToLogArray ( "Fiat Login", $this->fiatLoginUrl, 2, 1 );
 
 		$curl = curl_init();
 
@@ -104,6 +118,7 @@ class apiFiat {
 			CURLOPT_FOLLOWLOCATION 	=> 	true,
 			CURLOPT_HTTP_VERSION 	=> 	CURL_HTTP_VERSION_1_1,
 			CURLOPT_CUSTOMREQUEST 	=> 	'POST',
+			CURLOPT_COOKIEFILE		=>	$this->fiatCookieJar,
 			CURLOPT_POSTFIELDS 		=>	'loginID='.$this->fiatLoginUser.'&'.
 										'password='.$this->fiatLoginPassword.'&'.
 										'sessionExpiration='.$this->fiatLoginSessionExpiration.'&'.
@@ -122,6 +137,8 @@ class apiFiat {
 			CURLOPT_HTTPHEADER 		=> 	array(
 
 				'Content-Type: application/x-www-form-urlencoded',
+				//'Cookie: ASP.NET_SessionId=til3lzkz3kdqas14lehwq0sm; gmid=gmid.ver4.AcbHk6LF-w.mSDIL-OQ0kWBFotQ2YipdQYB7E7-SJmCxvyOx17OTZbXPEMSsOhyWZ0kdDov9fOV.JA4W5L23nJwCCaRi9qTzVhDeJllPyrw5XNoMqGh51-vECLTZH_PTkjfG42orCYwsSXpUBCpC4mPQjfh1eVEHBg.sc3; hasGmid=ver4; ucid=vthVogPt1lCCjnSIR8M6nw'
+			  
 			
 			),
 		));
@@ -129,7 +146,7 @@ class apiFiat {
 		$response = curl_exec($curl);
 		
 		curl_close($curl);
-		$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".$response."\n<br>";
+		$this->appendToLogArray ( "Response", $response, 2, 2 );
 		
 		$responseRaw = json_decode($response, true);
 		$this->fiatLoginToken = $responseRaw['sessionInfo']['login_token'];
@@ -137,15 +154,15 @@ class apiFiat {
 		
 		$_SESSION['fiatLoginUID'] = $this->fiatLoginUID;
 
-		$this->log .= "&#9733; fiatLoginToken = ".$this->fiatLoginToken."\n<br>";
-		$this->log .= "&#9733; fiatLoginUID = ".$this->fiatLoginUID."\n<br>";
+		$this->appendToLogArray ( "fiatLoginToken", $this->fiatLoginToken, 3, 2 );
+		$this->appendToLogArray ( "fiatLoginUID", $this->fiatLoginUID, 3, 2 );
 	}
 
 
 
 	private function callApiFiatJWT () {
 
-		$this->log .= "<b>Fiat JWT</b> = ".$this->fiatJwtUrl."\n<br>";
+		$this->appendToLogArray ( "Fiat JWT", $this->fiatJwtUrl, 2, 1 );
 
 		$curl = curl_init();
 
@@ -165,18 +182,26 @@ class apiFiat {
 			CURLOPT_TIMEOUT 		=> 	0,
 			CURLOPT_FOLLOWLOCATION 	=> 	true,
 			CURLOPT_HTTP_VERSION 	=> 	CURL_HTTP_VERSION_1_1,
+			CURLOPT_COOKIEFILE		=>	$this->fiatCookieJar,
 			CURLOPT_CUSTOMREQUEST 	=> 	'GET',
+			//CURLOPT_HTTPHEADER => array(
+			//  'Cookie: ASP.NET_SessionId=til3lzkz3kdqas14lehwq0sm; gmid=gmid.ver4.AcbHk6LF-w.mSDIL-OQ0kWBFotQ2YipdQYB7E7-SJmCxvyOx17OTZbXPEMSsOhyWZ0kdDov9fOV.JA4W5L23nJwCCaRi9qTzVhDeJllPyrw5XNoMqGh51-vECLTZH_PTkjfG42orCYwsSXpUBCpC4mPQjfh1eVEHBg.sc3; hasGmid=ver4; ucid=vthVogPt1lCCjnSIR8M6nw'
+			//),
 		  ));
 		
 		$response = curl_exec($curl);
 
 		curl_close($curl);
-		$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".$response."\n<br>";
+		$this->appendToLogArray ( "Response", $response, 2, 2 );
 
 		$responseRaw = json_decode($response, true);
-		$this->fiatJwtIdToken = $responseRaw['id_token'];
+		if ( $responseRaw['id_token'] ) {
+		
+			$this->fiatJwtIdToken = $responseRaw['id_token'];
 
-		$this->log .= "&#9733; fiatJwtIdToken = ".$this->fiatJwtIdToken."\n<br>";
+			$this->appendToLogArray ( "fiatJwtIdToken", $this->fiatJwtIdToken, 3, 2 );
+
+		}
 
 	}
 
@@ -185,7 +210,7 @@ class apiFiat {
 
 	private function callApiAmazonCognito () {
 
-		$this->log .= "<b>awsAuthUrl</b> = ".$this->awsAuthUrl."\n<br>";
+		$this->appendToLogArray ( "awsAuthUrl", $this->awsAuthUrl, 2, 1 );
 
 		$curl = curl_init();
 
@@ -219,14 +244,14 @@ class apiFiat {
 		$response = curl_exec($curl);
 
 		curl_close($curl);
-		$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".$response."\n<br>";
+		$this->appendToLogArray ( "Response", $response, 2, 2 );
 
 		$responseRaw = json_decode($response, true);
 		$this->awsAuthIdentityID = $responseRaw['IdentityId'];
 		$this->awsAuthToken = $responseRaw['Token'];
 
-		$this->log .= "&#9733; awsAuthIdentityID = ".$this->awsAuthIdentityID."\n<br>";
-		$this->log .= "&#9733; awsAuthToken = ".$this->awsAuthToken."\n<br>";
+		$this->appendToLogArray ( "awsAuthIdentityID", $this->awsAuthIdentityID, 3, 2 );
+		$this->appendToLogArray ( "awsAuthToken", $this->awsAuthToken, 3, 2 );
 
 	}
 
@@ -235,7 +260,7 @@ class apiFiat {
 
 	private function callApiAmazonGetCredentials () {
 
-		$this->log .= "<b>cognitoidentity.GetCredentialsForIdentityOutput</b> = ".$this->awsAuthUrl."\n<br>";
+		$this->appendToLogArray ( "cognitoidentity.GetCredentialsForIdentityOutput", $this->awsAuthUrl, 2, 1 );
 		
 		// The AWS client is relying on these being retrieved via `getenv` and DotEnv no longer sets via `putenv`
 		putenv("AWS_ACCESS_KEY_ID=ABC");
@@ -260,7 +285,7 @@ class apiFiat {
 			),
 		));
 		
-		$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".$response."\n<br>";
+		$this->appendToLogArray ( "Response", $response, 2, 2 );
 		
 		$posJSON = strpos ( $response, "{" );
 		$responseRaw = json_decode( substr ($response, $posJSON), true);
@@ -277,10 +302,10 @@ class apiFiat {
 		$_SESSION['awsCredentialsSecretKey'] = $Credentials['SecretKey'];
 		$_SESSION['awsCredentialsSessionToken'] = $Credentials['SessionToken'];
 		
-		$this->appendToLog ( "&#9733; awsCredentialsAccessKeyId = ".$this->awsCredentialsAccessKeyId."\n<br>" );
-		$this->appendToLog ( "&#9733; awsCredentialsExpiration = ".$this->awsCredentialsExpiration."\n<br>" );
-		$this->appendToLog ( "&#9733; awsCredentialsSecretKey = ".$this->awsCredentialsSecretKey."\n<br>" );
-		$this->appendToLog ( "&#9733; awsCredentialsSessionToken = ".$this->awsCredentialsSessionToken."\n<br>" );
+		$this->appendToLogArray ( "awsCredentialsAccessKeyId", $this->awsCredentialsAccessKeyId, 3, 2 );
+		$this->appendToLogArray ( "awsCredentialsExpiration", $this->awsCredentialsExpiration, 3, 2 );
+		$this->appendToLogArray ( "awsCredentialsSecretKey", $this->awsCredentialsSecretKey, 3, 2 );
+		$this->appendToLogArray ( "awsCredentialsSessionToken", $this->awsCredentialsSessionToken, 3, 2 );
 
 	}
 
@@ -325,47 +350,56 @@ class apiFiat {
 	
 	
 	
-	public function getVehicles () {
+	public function apiRequestVehicles () {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->log .= "<b>Vehicles</b> = ".$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles?stage=ALL\n<br>";
+		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles?stage=ALL", 2, 1 );
 
-		$request = new GuzzleHttp\Psr7\Request (
-			'GET',
-			$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles?stage=ALL",
-			[  'Content-Type' => 'application/json',
-			   'x-clientapp-version' => '1.0',
-			   'clientrequestid' => '1592674815357357',
-			   'X-Api-Key' => $this->awsAuthXApiKey,
-			   'x-originator-type' => 'web',
-			   'locale' => 'de_de',
-			   'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
-		   ]
-		);
-		$signed_request = $this->sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
-	   
-		$client = new \GuzzleHttp\Client();
-		$response = $client->send($signed_request);
+		if ( $this->awsCredentialsSessionToken ) {
 
-		$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".($response->getBody())."\n<br>";
+			$request = new GuzzleHttp\Psr7\Request (
+				'GET',
+				$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles?stage=ALL",
+				[  'Content-Type' => 'application/json',
+				'x-clientapp-version' => '1.0',
+				'clientrequestid' => '1592674815357357',
+				'X-Api-Key' => $this->awsAuthXApiKey,
+				'x-originator-type' => 'web',
+				'locale' => 'de_de',
+				'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
+			]
+			);
+			$signed_request = $this->sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
+		
+			$client = new \GuzzleHttp\Client();
+			$response = $client->send($signed_request);
 
-		$responseRaw = json_decode( ($response->getBody()), true );
+			$this->appendToLogArray ( "Response", ($response->getBody()), 2, 2 );
 
-		$this->vehicles = $responseRaw['vehicles'];
-		$this->awsCredentialsUserID = $responseRaw['userid'];
+			$responseRaw = json_decode( ($response->getBody()), true );
 
-		$this->log .= "&nbsp;&nbsp;&nbsp; Vehicles = ".implode(" ", $this->vehicles)."\n<br>";
+			$this->vehicles = $responseRaw['vehicles'];
+			$this->awsCredentialsUserID = $responseRaw['userid'];
+
+			$this->appendToLogArray ( "Vehicles", implode(" ", $this->vehicles), 2, 2 );
+
+		}
+		else {
+
+			$this->appendToLogArray ( "Failure", "awsCredentialsSessionToken not set", 5, 2 );
+
+		}
 
 	}
 
 
 
-	public function getVehicleStatus ( $vin ) {
+	public function apiRequestVehicleStatus ( $vin ) {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->log .= "<b>Vehicle Status</b> = ".$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status\n<br>";
+		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status", 2, 1 );
 
 		
 		$request = new GuzzleHttp\Psr7\Request(
@@ -384,18 +418,22 @@ class apiFiat {
    
 		$client = new \GuzzleHttp\Client();
 		$response = $client->send($signed_request);
-   
-	   	$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".($response->getBody())."\n<br>";
+
+		$this->appendToLogArray ( "Response", ($response->getBody()), 2, 2 );
+
+		$responseRaw = json_decode( ($response->getBody()), true );
+
+		$this->vehicleStatus[$vin]['Status'] = $responseRaw;
 
 	}
 
 
 
-	public function getVehicleLocation ( $vin ) {
+	public function apiRequestVehicleLocation ( $vin ) {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->log .= "<b>Vehicle Location</b> = ".$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown\n<br>";
+		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown", 2, 1 );
 
 		$request = new GuzzleHttp\Psr7\Request(
 			'GET',
@@ -413,8 +451,89 @@ class apiFiat {
    
 		$client = new \GuzzleHttp\Client();
 		$response = $client->send($signed_request);
-   
-	   	$this->log .= "&nbsp;&nbsp;&nbsp; Response = ".($response->getBody())."\n<br>";
+
+		$this->appendToLogArray ( "Response", ($response->getBody()), 2, 2 );
+
+		$responseRaw = json_decode( ($response->getBody()), true );
+
+		$this->vehicleStatus[$vin]['Location'] = $responseRaw;
+
+	}
+
+
+
+	public function apiRequestAll () {
+
+		$this->apiRequestVehicles ();
+
+		if ( is_array($this->vehicles) ) {
+
+			foreach ($this->vehicles as $vehicle) {
+			
+				$this->apiRequestVehicleStatus ( $vehicle['vin'] );
+				$this->apiRequestVehicleLocation ( $vehicle['vin'] );
+			
+			}
+		}
+	}
+
+
+
+	public function exportInformation () {
+
+		$exportArray = array (
+
+			"vehicles"	=>	$this->vehicles,
+			"vehicle"	=>	$this->vehicleStatus
+
+		);
+
+		return json_encode ( $exportArray );
+
+	}
+
+
+
+	public function getVehicleStatusData ( $vin, $level1, $level2 = "", $level3 = "", $level4 = "", $level5 = "" ) {
+
+		// first draft, has to be validated with real data
+
+		if ( $level1 != "" && $level2 != "" && $level3 != "" && $level4 != "" && $level5 ) {
+
+			$return = $this->vehicleStatus[$level1][$level2][$level3][$level4][$level5];
+
+		}
+		if ( $level1 != "" && $level2 != "" && $level3 != "" && $level4 != "" ) {
+
+			$return = $this->vehicleStatus[$level1][$level2][$level3][$level4];
+
+		}
+		if ( $level1 != "" && $level2 != "" && $level3 != "" ) {
+
+			$return = $this->vehicleStatus[$level1][$level2][$level3];
+
+		}
+		if ( $level1 != "" && $level2 != "" ) {
+
+			$return = $this->vehicleStatus[$level1][$level2];
+
+		}
+		if ( $level1 != "" ) {
+
+			$return = $this->vehicleStatus[$level1];
+
+		}
+
+		if ( is_array ( $return )) {
+
+			return json_encode ( $return );
+
+		}
+		else {
+
+			return $return;
+
+		}
 
 	}
 
@@ -440,10 +559,18 @@ class apiFiat {
 
 
 
-	public function appendToLog ( $log ) {
+	public function getLogArray ( $asJSON = true ) {
 
-		$this->log .= $log;
+		if ( $asJSON ) {
+		
+			return json_encode ($this->logArray);
 
+		}
+		else {
+
+			return $this->logArray;
+
+		}
 	}
 
 
@@ -472,6 +599,22 @@ class apiFiat {
 			$randomString .= $characters[rand(0, $charactersLength - 1)];
 		}
 		return $randomString;
+
+	}
+
+
+
+	private function appendToLogArray ( $topic, $message, $level = 1, $hierarchie = 1 ) {
+
+		array_push ( $this->logArray, array (
+
+			'timestamp'		=>	time(),
+			'hierarchie'	=>	$hierarchie,
+			'topic'			=>	$topic,
+			'message'		=>	$message,
+			'level'			=>	$level
+
+		));
 
 	}
 

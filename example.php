@@ -1,5 +1,8 @@
 <?php
 
+// Include the api file (take care of the correct path)
+include ( api.php );
+
 // Create a new instance with your FIAT user account credentials
 $fiat = new apiFiat( FIAT_USER, FIAT_PASSWORD );
 

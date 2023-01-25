@@ -16,7 +16,7 @@ Thanks to all, which helped with some puzzle parts. It was not so easy to combin
 ## Status and further steps:
 
 - So far it is tested until the getVehicles-Request.
-- getVehicleStatus and getVehicleLocation will be tested as soon we received our Fiat car.
+- getVehicleStatus and getVehicleLocation will be tested as soon we received our Fiat car. Feel free to test in your setup and let me know if it works or not.
 - Command requests to come later (as soon we have a car to test with)
 - As I'm using #OpenHAB as a smart home plattform I would highly appreciate if this PHP script could be a good starting point to develop a FIAT binding.
 - Unfortunately I'm not familiar with binding development for OpenHAB, but maybe someone else could help out to do the programming part. I would support on the testing part.
