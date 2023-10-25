@@ -399,12 +399,12 @@ class apiFiat {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status", 2, 1 );
+		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v2/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status", 2, 1 );
 
 		
 		$request = new GuzzleHttp\Psr7\Request(
 			'GET',
-			$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status",
+			$this->awsApiUrl."/v2/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status",
 			[  'Content-Type' => 'application/json',
 			   'x-clientapp-version' => '1.0',
 			   'clientrequestid' => '1592674815357357',
@@ -414,7 +414,7 @@ class apiFiat {
 			   'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
 		   ]
 		);
-		$signed_request = sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
+		$signed_request = $this->sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
    
 		$client = new \GuzzleHttp\Client();
 		$response = $client->send($signed_request);
@@ -447,7 +447,7 @@ class apiFiat {
 			   'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
 		   ]
 		);
-		$signed_request = sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
+		$signed_request = $this->sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
    
 		$client = new \GuzzleHttp\Client();
 		$response = $client->send($signed_request);
