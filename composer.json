@@ -1,6 +1,7 @@
 {
     "require": {
         "aws/aws-sdk-php": "3.*",
-        "psr/http-message": "2.*"
+        "psr/http-message": "2.*",
+        "guzzlehttp/guzzle": "7.*"
     }
 }
