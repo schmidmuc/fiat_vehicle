@@ -433,11 +433,11 @@ class apiFiat {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown", 2, 1 );
+		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v1/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown", 2, 1 );
 
 		$request = new GuzzleHttp\Psr7\Request(
 			'GET',
-			$this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown",
+			$this->awsApiUrl."/v1/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown",
 			[  'Content-Type' => 'application/json',
 			   'x-clientapp-version' => '1.0',
 			   'clientrequestid' => '1592674815357357',
