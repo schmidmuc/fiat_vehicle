@@ -6,6 +6,7 @@ use Aws\Credentials\Credentials;
 use Aws\Signature\SignatureV4;
 use Psr\Http\Message\RequestInterface;
 use Aws\CognitoIdentity\CognitoIdentityClient;
+use GuzzleHttp\Exception\ClientException;
 
 /**
  * apiFiat
@@ -20,6 +21,7 @@ class apiFiat {
 	private int				$fiatLoginSessionExpiration;
 	private string			$fiatLoginUser;
 	private string			$fiatLoginPassword;
+	private string			$fiatLoginPin;
 	private string			$fiatLoginToken;
 	private string			$fiatLoginUID;
 	private					$fiatCookieJar;
@@ -43,6 +45,10 @@ class apiFiat {
 	private string			$awsService						= "execute-api";
 	private string			$awsRegion						= "eu-west-1";
 
+	private string			$pinAuthUrl						= "https://mfa.fcl-01.fcagcv.com";
+	private string			$pinAuthApiKey					= "JWRYW7IYhW9v0RqDghQSx4UcRYRILNmc8zAuh5ys";
+	private string			$pinAuthToken					= "";
+
 	private array			$vehicles;
 	private array			$vehicleStatus;
 
@@ -50,10 +56,11 @@ class apiFiat {
 
 
 
-    public function __construct ( string $user, string $password ) {
+    public function __construct ( string $user, string $password, string $pin = "" ) {
 
         $this->fiatLoginUser 				= $user;
         $this->fiatLoginPassword 			= $password;
+        $this->fiatLoginPin 				= $pin;
 
 		$this->fiatLoginSessionExpiration	= 7776000;
 		$this->awsAuthClientRequestID 		= $this->getRandomClientRequestID();
@@ -149,6 +156,9 @@ class apiFiat {
 		$this->appendToLogArray ( "Response", $response, 2, 2 );
 		
 		$responseRaw = json_decode($response, true);
+
+		if ( array_key_exists('sessionInfo', $responseRaw) ) {
+
 		$this->fiatLoginToken = $responseRaw['sessionInfo']['login_token'];
 		$this->fiatLoginUID = $responseRaw['UID'];
 		
@@ -156,6 +166,8 @@ class apiFiat {
 
 		$this->appendToLogArray ( "fiatLoginToken", $this->fiatLoginToken, 3, 2 );
 		$this->appendToLogArray ( "fiatLoginUID", $this->fiatLoginUID, 3, 2 );
+			
+		}
 	}
 
 
@@ -210,49 +222,58 @@ class apiFiat {
 
 	private function callApiAmazonCognito () {
 
-		$this->appendToLogArray ( "awsAuthUrl", $this->awsAuthUrl, 2, 1 );
+		if (	$this->fiatJwtIdToken &&
+				$this->awsAuthClientRequestID &&
+				$this->awsAuthXApiKey ) {
 
-		$curl = curl_init();
+			$this->appendToLogArray ( "awsAuthUrl", $this->awsAuthUrl, 2, 1 );
 
-		curl_setopt_array($curl, array(
+			$curl = curl_init();
 
-			CURLOPT_URL 			=> 	$this->awsAuthUrl,
-			CURLOPT_RETURNTRANSFER 	=> 	true,
-			CURLOPT_ENCODING 		=> 	'',
-			CURLOPT_MAXREDIRS 		=> 	10,
-			CURLOPT_TIMEOUT 		=> 	0,
-			CURLOPT_FOLLOWLOCATION 	=> 	true,
-			CURLOPT_HTTP_VERSION 	=> 	CURL_HTTP_VERSION_1_1,
-			CURLOPT_CUSTOMREQUEST 	=> 	'POST',
-			CURLOPT_POSTFIELDS 		=>	'{
+			curl_setopt_array($curl, array(
 
-				"gigya_token": "'.$this->fiatJwtIdToken.'"
+				CURLOPT_URL 			=> 	$this->awsAuthUrl,
+				CURLOPT_RETURNTRANSFER 	=> 	true,
+				CURLOPT_ENCODING 		=> 	'',
+				CURLOPT_MAXREDIRS 		=> 	10,
+				CURLOPT_TIMEOUT 		=> 	0,
+				CURLOPT_FOLLOWLOCATION 	=> 	true,
+				CURLOPT_HTTP_VERSION 	=> 	CURL_HTTP_VERSION_1_1,
+				CURLOPT_CUSTOMREQUEST 	=> 	'POST',
+				CURLOPT_POSTFIELDS 		=>	'{
 
-			}',
-			CURLOPT_HTTPHEADER 		=> 	array(
+					"gigya_token": "'.$this->fiatJwtIdToken.'"
 
-				'x-clientapp-version: 1.0',
-				'clientrequestid: '.$this->awsAuthClientRequestID,
-				'X-Api-Key: '.$this->awsAuthXApiKey,
-				'x-originator-type: web',
-				'x-clientapp-name: CWP',
-				'Content-Type: application/json'
+				}',
+				CURLOPT_HTTPHEADER 		=> 	array(
 
-			),
-		));
+					'x-clientapp-version: 1.0',
+					'clientrequestid: '.$this->awsAuthClientRequestID,
+					'X-Api-Key: '.$this->awsAuthXApiKey,
+					'x-originator-type: web',
+					'x-clientapp-name: CWP',
+					'Content-Type: application/json'
 
-		$response = curl_exec($curl);
+				),
+			));
 
-		curl_close($curl);
-		$this->appendToLogArray ( "Response", $response, 2, 2 );
+			$response = curl_exec($curl);
 
-		$responseRaw = json_decode($response, true);
-		$this->awsAuthIdentityID = $responseRaw['IdentityId'];
-		$this->awsAuthToken = $responseRaw['Token'];
+			curl_close($curl);
+			$this->appendToLogArray ( "Response", $response, 2, 2 );
 
-		$this->appendToLogArray ( "awsAuthIdentityID", $this->awsAuthIdentityID, 3, 2 );
-		$this->appendToLogArray ( "awsAuthToken", $this->awsAuthToken, 3, 2 );
+			$responseRaw = json_decode($response, true);
 
+			if ( array_key_exists('IdentityId', $responseRaw)) {
+
+				$this->awsAuthIdentityID = $responseRaw['IdentityId'];
+				$this->awsAuthToken = $responseRaw['Token'];
+
+				$this->appendToLogArray ( "awsAuthIdentityID", $this->awsAuthIdentityID, 3, 2 );
+				$this->appendToLogArray ( "awsAuthToken", $this->awsAuthToken, 3, 2 );
+
+			}
+		}
 	}
 
 
@@ -273,40 +294,44 @@ class apiFiat {
 
 		));
 		
-		$response = $client->getCredentialsForIdentity(array(
-
-			// IdentityId is required
-			'IdentityId' => $this->awsAuthIdentityID,
-			'Logins' => array(
-
-				// Associative array of custom 'IdentityProviderName' key names
-				'cognito-identity.amazonaws.com' => $this->awsAuthToken
-
-			),
-		));
+		if ( 	isset ( $this->awsAuthIdentityID ) &&
+				isset ( $this->awsAuthToken ) ) {
 		
-		$this->appendToLogArray ( "Response", $response, 2, 2 );
-		
-		$posJSON = strpos ( $response, "{" );
-		$responseRaw = json_decode( substr ($response, $posJSON), true);
-		
-		$Credentials = $responseRaw['Credentials'];
-		
-		$this->awsCredentialsAccessKeyId = $Credentials['AccessKeyId'];
-		$this->awsCredentialsExpiration = $Credentials['Expiration'];
-		$this->awsCredentialsSecretKey = $Credentials['SecretKey'];
-		$this->awsCredentialsSessionToken = $Credentials['SessionToken'];
+			$response = $client->getCredentialsForIdentity(array(
 
-		$_SESSION['awsCredentialsAccessKeyId'] = $Credentials['AccessKeyId'];
-		$_SESSION['awsCredentialsExpiration'] = $Credentials['Expiration'];
-		$_SESSION['awsCredentialsSecretKey'] = $Credentials['SecretKey'];
-		$_SESSION['awsCredentialsSessionToken'] = $Credentials['SessionToken'];
-		
-		$this->appendToLogArray ( "awsCredentialsAccessKeyId", $this->awsCredentialsAccessKeyId, 3, 2 );
-		$this->appendToLogArray ( "awsCredentialsExpiration", $this->awsCredentialsExpiration, 3, 2 );
-		$this->appendToLogArray ( "awsCredentialsSecretKey", $this->awsCredentialsSecretKey, 3, 2 );
-		$this->appendToLogArray ( "awsCredentialsSessionToken", $this->awsCredentialsSessionToken, 3, 2 );
+				// IdentityId is required
+				'IdentityId' => $this->awsAuthIdentityID,
+				'Logins' => array(
 
+					// Associative array of custom 'IdentityProviderName' key names
+					'cognito-identity.amazonaws.com' => $this->awsAuthToken
+
+				),
+			));
+			
+			$this->appendToLogArray ( "Response", $response, 2, 2 );
+			
+			$posJSON = strpos ( $response, "{" );
+			$responseRaw = json_decode( substr ($response, $posJSON), true);
+			
+			$Credentials = $responseRaw['Credentials'];
+			
+			$this->awsCredentialsAccessKeyId = $Credentials['AccessKeyId'];
+			$this->awsCredentialsExpiration = $Credentials['Expiration'];
+			$this->awsCredentialsSecretKey = $Credentials['SecretKey'];
+			$this->awsCredentialsSessionToken = $Credentials['SessionToken'];
+
+			$_SESSION['awsCredentialsAccessKeyId'] = $Credentials['AccessKeyId'];
+			$_SESSION['awsCredentialsExpiration'] = $Credentials['Expiration'];
+			$_SESSION['awsCredentialsSecretKey'] = $Credentials['SecretKey'];
+			$_SESSION['awsCredentialsSessionToken'] = $Credentials['SessionToken'];
+			
+			$this->appendToLogArray ( "awsCredentialsAccessKeyId", $this->awsCredentialsAccessKeyId, 3, 2 );
+			$this->appendToLogArray ( "awsCredentialsExpiration", $this->awsCredentialsExpiration, 3, 2 );
+			$this->appendToLogArray ( "awsCredentialsSecretKey", $this->awsCredentialsSecretKey, 3, 2 );
+			$this->appendToLogArray ( "awsCredentialsSessionToken", $this->awsCredentialsSessionToken, 3, 2 );
+
+		}
 	}
 
 
@@ -329,6 +354,12 @@ class apiFiat {
 
 
 	public function renewAmazonGetCredentialsIfNecessary () {
+
+		if ( !array_key_exists('awsCredentialsExpiration', $_SESSION)) {
+
+			$_SESSION['awsCredentialsExpiration'] = "2000-01-01 00:00:00";
+
+		}
 
 		if (	strtotime($_SESSION['awsCredentialsExpiration']) < time () ||
 				!isset ($_SESSION['fiatLoginUID']) ) {
@@ -354,7 +385,7 @@ class apiFiat {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles?stage=ALL", 2, 1 );
+		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v4/accounts/".$this->fiatLoginUID."/vehicles?stage=ALL", 3, 1 );
 
 		if ( $this->awsCredentialsSessionToken ) {
 
@@ -382,7 +413,7 @@ class apiFiat {
 			$this->vehicles = $responseRaw['vehicles'];
 			$this->awsCredentialsUserID = $responseRaw['userid'];
 
-			$this->appendToLogArray ( "Vehicles", implode(" ", $this->vehicles), 2, 2 );
+			// $this->appendToLogArray ( "Vehicles", implode(" ", $this->vehicles), 2, 2 );
 
 		}
 		else {
@@ -399,7 +430,7 @@ class apiFiat {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v2/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status", 2, 1 );
+		$this->appendToLogArray ( "Vehicle ".$vin, $this->awsApiUrl."/v2/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/status", 3, 1 );
 
 		
 		$request = new GuzzleHttp\Psr7\Request(
@@ -408,7 +439,7 @@ class apiFiat {
 			[  'Content-Type' => 'application/json',
 			   'x-clientapp-version' => '1.0',
 			   'clientrequestid' => '1592674815357357',
-			   'X-Api-Key' => 'qLYupk65UU1tw2Ih1cJhs4izijgRDbir2UFHA3Je',
+			   'X-Api-Key' => $this->awsAuthXApiKey,
 			   'x-originator-type' => 'web',
 			   'locale' => 'de_de',
 			   'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
@@ -419,11 +450,24 @@ class apiFiat {
 		$client = new \GuzzleHttp\Client();
 		$response = $client->send($signed_request);
 
+		$this->appendToLogArray ( "StatusCode", ($response->getStatusCode()), 2, 2 );
+		$this->appendToLogArray ( "ReasonPhrase", ($response->getReasonPhrase()), 2, 2 );
 		$this->appendToLogArray ( "Response", ($response->getBody()), 2, 2 );
 
 		$responseRaw = json_decode( ($response->getBody()), true );
 
-		$this->vehicleStatus[$vin]['Status'] = $responseRaw;
+		$this->vehicleStatus[$vin]['status'] = $responseRaw;
+		
+		$this->appendToLogArray ( "odometer", 			$this->vehicleStatus[$vin]['status']['vehicleInfo']['odometer']['odometer']['value']." ".$this->vehicleStatus[$vin]['status']['vehicleInfo']['odometer']['odometer']['unit'], 3, 2 );
+		$this->appendToLogArray ( "daysToService", 		$this->vehicleStatus[$vin]['status']['vehicleInfo']['daysToService'], 3, 2 );
+		$this->appendToLogArray ( "distanceToService",	$this->vehicleStatus[$vin]['status']['vehicleInfo']['distanceToService']['distanceToService']['value']." ".$this->vehicleStatus[$vin]['status']['vehicleInfo']['distanceToService']['distanceToService']['unit'], 3, 2 );
+		
+		$this->appendToLogArray ( "ignitionStatus", 	$this->vehicleStatus[$vin]['status']['evInfo']['ignitionStatus'], 3, 2 );
+		$this->appendToLogArray ( "stateOfCharge", 		$this->vehicleStatus[$vin]['status']['evInfo']['battery']['stateOfCharge']." %", 3, 2 );
+		$this->appendToLogArray ( "plugInStatus", 		$this->vehicleStatus[$vin]['status']['evInfo']['battery']['plugInStatus'], 3, 2 );
+		$this->appendToLogArray ( "chargingStatus", 	$this->vehicleStatus[$vin]['status']['evInfo']['battery']['chargingStatus'], 3, 2 );
+		$this->appendToLogArray ( "totalRange", 		$this->vehicleStatus[$vin]['status']['evInfo']['battery']['totalRange']." km", 3, 2 );
+		$this->appendToLogArray ( "timestamp", 			date("d.m.Y H:i:s", $this->vehicleStatus[$vin]['status']['evInfo']['timestamp']/1000), 3, 2 );
 
 	}
 
@@ -433,7 +477,7 @@ class apiFiat {
 
 		$this->renewAmazonGetCredentialsIfNecessary();
 
-		$this->appendToLogArray ( "Vehicles", $this->awsApiUrl."/v1/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown", 2, 1 );
+		$this->appendToLogArray ( "Location ".$vin, $this->awsApiUrl."/v1/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/location/lastknown", 3, 1 );
 
 		$request = new GuzzleHttp\Psr7\Request(
 			'GET',
@@ -441,7 +485,7 @@ class apiFiat {
 			[  'Content-Type' => 'application/json',
 			   'x-clientapp-version' => '1.0',
 			   'clientrequestid' => '1592674815357357',
-			   'X-Api-Key' => 'qLYupk65UU1tw2Ih1cJhs4izijgRDbir2UFHA3Je',
+			   'X-Api-Key' => $this->awsAuthXApiKey,
 			   'x-originator-type' => 'web',
 			   'locale' => 'de_de',
 			   'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
@@ -456,8 +500,139 @@ class apiFiat {
 
 		$responseRaw = json_decode( ($response->getBody()), true );
 
-		$this->vehicleStatus[$vin]['Location'] = $responseRaw;
+		$this->vehicleStatus[$vin]['location'] = $responseRaw;
 
+		$this->appendToLogArray ( "longitude", $this->vehicleStatus[$vin]['location']['longitude'], 3, 2 );
+		$this->appendToLogArray ( "latitude", $this->vehicleStatus[$vin]['location']['latitude'], 3, 2 );
+		$this->appendToLogArray ( "altitude", $this->vehicleStatus[$vin]['location']['altitude'], 3, 2 );
+		$this->appendToLogArray ( "bearing", $this->vehicleStatus[$vin]['location']['bearing'], 3, 2 );
+		$this->appendToLogArray ( "isLocationApprox", $this->vehicleStatus[$vin]['location']['isLocationApprox'], 3, 2 );
+		$this->appendToLogArray ( "timestamp", date("d.m.Y H:i:s", $this->vehicleStatus[$vin]['location']['timeStamp']/1000), 3, 2 );
+
+	}
+
+	private function callApiPIN () {
+
+		if ( $this->fiatLoginPin ) {
+
+			$this->renewAmazonGetCredentialsIfNecessary();
+
+			$this->appendToLogArray ( "PIN", $this->pinAuthUrl."/v1/accounts/".$this->fiatLoginUID."/ignite/pin/authenticate", 3, 1 );
+			
+			$jsonPIN = json_encode ( array ( "pin" => base64_encode($this->fiatLoginPin)));
+			$this->appendToLogArray ( "jsonPIN", $jsonPIN, 3, 2 );
+
+			$request = new GuzzleHttp\Psr7\Request(
+				'POST',
+				$this->pinAuthUrl."/v1/accounts/".$this->fiatLoginUID."/ignite/pin/authenticate",
+				[  'Content-Type' => 'application/json',
+				'x-clientapp-version' => '1.0',
+				'clientrequestid' => '1592674815357357',
+				'X-Api-Key' => $this->pinAuthApiKey,
+				'x-originator-type' => 'web',
+				'locale' => 'de_de',
+				'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
+				],
+				$jsonPIN
+			);
+			$signed_request = $this->sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
+	
+			$client = new \GuzzleHttp\Client();
+			$response = $client->send($signed_request);
+
+			$this->appendToLogArray ( "StatusCode", ($response->getStatusCode()), 2, 2 );
+			$this->appendToLogArray ( "ReasonPhrase", ($response->getReasonPhrase()), 2, 2 );
+			$this->appendToLogArray ( "Response", ($response->getBody()), 2, 2 );
+
+			$responseRaw = json_decode( ($response->getBody()), true );
+			$this->pinAuthToken = $responseRaw['token'];
+			$this->appendToLogArray ( "pinAuthToken", $this->pinAuthToken, 2, 2 );
+		}
+		else {
+
+	}
+	}
+
+
+	public function apiCommand ( $vin, $command ) {
+
+		$actionURL = array (
+
+			"VF"			=>	"location",			// UpdateLocation (updates gps location of the car)
+			"DEEPREFRESH"	=>	"ev",				// DeepRefresh (same as "RefreshBatteryStatus")
+			"HBLF"			=>	"remote",			// Blink (blink lights)
+			"CNOW"			=>	"ev/chargenow",		// ChargeNOW (starts charging)
+			"ROTRUNKUNLOCK"	=>	"remote",			// Unlock trunk
+			"ROTRUNKLOCK"	=>	"remote",			// Lock trunk
+			"RDU"			=>	"remote",			// Unlock doors
+			"RDL"			=>	"remote",			// Lock doors
+			"ROPRECOND"		=>	"remote"			// Turn on/off HVAC
+			
+		);
+
+		if ( array_key_exists ($command, $actionURL)) {
+
+			$this->renewAmazonGetCredentialsIfNecessary();
+			$this->callApiPIN();
+
+			$this->appendToLogArray ( "API Command", $this->awsApiUrl."/v1/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/".$actionURL[$command], 3, 1 );
+
+			$json = json_encode ( array ( "command" => $command, "pinAuth" => $this->pinAuthToken));
+			$this->appendToLogArray ( "json", $json, 3, 2 );
+			
+			try {
+
+				$request = new GuzzleHttp\Psr7\Request(
+					'POST',
+					$this->awsApiUrl."/v1/accounts/".$this->fiatLoginUID."/vehicles/".$vin."/".$actionURL[$command],
+					[  'Content-Type' => 'application/json',
+						'x-clientapp-version' => '1.0',
+						'clientrequestid' => '1592674815357357',
+						'X-Api-Key' => $this->awsAuthXApiKey,
+						'x-originator-type' => 'web',
+						'locale' => 'de_de',
+						'X-Amz-Security-Token' => $this->awsCredentialsSessionToken
+					],
+					$json
+				);
+				$signed_request = $this->sign($request, $this->awsCredentialsAccessKeyId, $this->awsCredentialsSecretKey);
+		
+				$client = new \GuzzleHttp\Client();
+				$response = $client->send($signed_request);
+
+				$this->appendToLogArray ( "StatusCode", ($response->getStatusCode()), 2, 2 );
+				$this->appendToLogArray ( "ReasonPhrase", ($response->getReasonPhrase()), 2, 2 );
+				$this->appendToLogArray ( "Response", ($response->getBody()), 2, 2 );
+
+				$responseRaw = json_decode( ($response->getBody()), true );
+
+			} catch (ClientException  $e) {
+
+				$this->appendToLogArray ( "Failure", ($e), 2, 2 );
+
+			}
+		}
+		else {
+
+			$this->appendToLogArray ( "API Command", "No valid command given", 5, 2 );
+
+		}
+	}
+
+
+	private function isValidVin ( $vin ) {
+
+		if ( 	is_string ( $vin ) && 
+				strlen ( $vin ) == 17 ) {
+
+			return true;
+
+		}
+		else {
+
+			return false;
+
+		}
 	}
 
 
@@ -470,9 +645,42 @@ class apiFiat {
 
 			foreach ($this->vehicles as $vehicle) {
 			
-				$this->apiRequestVehicleStatus ( $vehicle['vin'] );
-				$this->apiRequestVehicleLocation ( $vehicle['vin'] );
+				if ( $this->isValidVin ( $vehicle['vin'] ) ) {
+
+					$this->apiRequestVehicleStatus ( $vehicle['vin'] );
+					$this->apiRequestVehicleLocation ( $vehicle['vin'] );
 			
+					if ( 	$this->vehicleStatus[$vehicle['vin']]['status']['evInfo']['battery']['chargingStatus'] == "CHARGING" &&
+							time() - $this->vehicleStatus[$vehicle['vin']]['status']['evInfo']['timestamp']/1000 > 5*60 ) {
+
+						$this->appendToLogArray ( "Deep Refresh", "each 5 minutes", 3, 1 );
+						$this->apiCommand ( $vehicle['vin'], "DEEPREFRESH" );
+
+					}
+					else if ( 	$this->vehicleStatus[$vehicle['vin']]['status']['evInfo']['battery']['chargingStatus'] == "CHARGING" ) {
+
+						$this->appendToLogArray ( "Deep Refresh", "No Deep Refresh (only once each 5 minutes)", 3, 1 );
+
+					}
+					else {
+						
+						$this->appendToLogArray ( "Deep Refresh", "No deep refresh, no charging process ongoing", 3, 1 );
+
+					}
+					
+					if ( 	$this->vehicleStatus[$vehicle['vin']]['status']['evInfo']['ignitionStatus'] == "ON" &&
+							time() - $this->vehicleStatus[$vehicle['vin']]['location']['timeStamp']/1000 > 5*60 ) {
+
+						$this->appendToLogArray ( "Location Update", "", 3, 1 );
+						$this->apiCommand ( $vehicle['vin'], "VF" );
+
+					}
+					else {
+						
+						$this->appendToLogArray ( "Location Update", "No location update, last update must be older than 5 minutes and vehicle must be moving", 3, 1 );
+
+					}
+				}
 			}
 		}
 	}
@@ -500,27 +708,27 @@ class apiFiat {
 
 		if ( $level1 != "" && $level2 != "" && $level3 != "" && $level4 != "" && $level5 ) {
 
-			$return = $this->vehicleStatus[$level1][$level2][$level3][$level4][$level5];
+			$return = $this->vehicleStatus[$vin][$level1][$level2][$level3][$level4][$level5];
 
 		}
-		if ( $level1 != "" && $level2 != "" && $level3 != "" && $level4 != "" ) {
+		elseif ( $level1 != "" && $level2 != "" && $level3 != "" && $level4 != "" ) {
 
-			$return = $this->vehicleStatus[$level1][$level2][$level3][$level4];
-
-		}
-		if ( $level1 != "" && $level2 != "" && $level3 != "" ) {
-
-			$return = $this->vehicleStatus[$level1][$level2][$level3];
+			$return = $this->vehicleStatus[$vin][$level1][$level2][$level3][$level4];
 
 		}
-		if ( $level1 != "" && $level2 != "" ) {
+		elseif ( $level1 != "" && $level2 != "" && $level3 != "" ) {
 
-			$return = $this->vehicleStatus[$level1][$level2];
+			$return = $this->vehicleStatus[$vin][$level1][$level2][$level3];
 
 		}
-		if ( $level1 != "" ) {
+		elseif ( $level1 != "" && $level2 != "" ) {
 
-			$return = $this->vehicleStatus[$level1];
+			$return = $this->vehicleStatus[$vin][$level1][$level2];
+
+		}
+		elseif ( $level1 != "" ) {
+
+			$return = $this->vehicleStatus[$vin][$level1];
 
 		}
 
@@ -578,7 +786,8 @@ class apiFiat {
 	public function sign (
 		RequestInterface $request,
 		string $accessKeyId,
-		string $secretAccessKey
+		string $secretAccessKey,
+		string $data = null
 	): RequestInterface {
 
 		$signature = new SignatureV4 ( $this->awsService, $this->awsRegion );
@@ -604,13 +813,14 @@ class apiFiat {
 
 
 
-	private function appendToLogArray ( $topic, $message, $level = 1, $hierarchie = 1 ) {
+	public function appendToLogArray ( $topic, $message, $level = 1, $hierarchie = 1 ) {
 
 		array_push ( $this->logArray, array (
 
 			'timestamp'		=>	time(),
 			'hierarchie'	=>	$hierarchie,
 			'topic'			=>	$topic,
+			//'message'		=>	wordwrap($message, 90, '<br>', true),
 			'message'		=>	$message,
 			'level'			=>	$level
 
