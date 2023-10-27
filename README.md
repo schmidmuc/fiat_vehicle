@@ -15,10 +15,11 @@ Thanks to all, which helped with some puzzle parts. It was not so easy to combin
 
 ## Status and further steps:
 
-- All requests tested with my car successfully.
+- All requests tested successfully with my car.
 - Possibility for command requests added with function apiCommand
 - As I'm using #OpenHAB as a smart home plattform I would highly appreciate if this PHP script could be a good starting point to develop a FIAT binding.
 - Unfortunately I'm not familiar with binding development for OpenHAB, but maybe someone else could help out to do the programming part. I would support on the testing part.
+- Tested cars: Fiat 500e 2023 (tested by two people)
 
 ## How to use?
 
@@ -26,4 +27,4 @@ An example for how to call the is shown in the example.php
 
 ## How to contribute?
 
-Please send information provided by exportInformation() function, so that I could do some tests with real vehicle data (before I have a Fiat car available). Feel free to XXX-out sensible information, but please don't delete complete information blocks. 
+Please send information provided by exportInformation() function, so that I could do some tests with other vehicle data than from my car. Feel free to XXX-out sensible information, but please don't delete complete information blocks. 
